@@ -1,99 +1,137 @@
 // c:\Users\sburm\OneDrive\Desktop\Practice-dev\mern-contact-list\server.js
 
-// Line 1: Loads environment variables from a .env file into process.env.
-// This is crucial for security, as it keeps sensitive information like your
-// database connection string out of the source code.
-require("dotenv").config(); 
+// --- SETUP & IMPORTS ---
+// This section imports all the necessary modules (libraries) and functions for the server.
 
-// Line 2-4: Import necessary Node.js modules (libraries).
-const express = require("express"); // The main framework for building the server and handling HTTP requests.
-const mongoose = require("mongoose"); // An ODM (Object Data Modeling) library for MongoDB. It simplifies interactions with the database.
-const cors = require("cors"); // A middleware to handle Cross-Origin Resource Sharing. This is essential for allowing your React frontend (running on a different port) to make requests to this backend server.
+// `dotenv`: This module loads environment variables from a local `.env` file into `process.env`.
+// This is crucial for security and configuration, as it keeps sensitive data like database
+// connection strings and JSON Web Token (JWT) secrets out of the source code. It should be required
+// at the very top of the entry file so that `process.env` is populated before any
+// other modules need to access it.
+require("dotenv").config();
 
-// Line 7-12: Imports the specific functions from your controller file.
-// This is a great practice for separating concerns. The server.js file handles routing,
-// while the contactController.js file handles the logic for each route.
+// `express`: The core web framework for Node.js. It provides a robust set of features
+// for building web and mobile applications, including routing, middleware, and more.
+const express = require("express");
+// `mongoose`: An Object Data Modeling (ODM) library for MongoDB. It simplifies interactions
+// with the database by providing a schema-based solution to model application data.
+const mongoose = require("mongoose");
+// `cors`: A middleware to handle Cross-Origin Resource Sharing. This is essential for
+// allowing your React frontend (running on a different port, e.g., 5173) to make
+// requests to this backend server (running on port 5000).
+const cors = require('cors');
+// `protect`: A custom middleware function to secure routes. It checks for a valid
+// JSON Web Token (JWT) in the request headers to ensure the user is authenticated before
+// allowing the request to proceed to the route handler.
+const { protect } = require("./middleware/authMiddleware");
+
+// Imports the specific route handler (controller) functions from their respective files.
+// This is a great practice for "separation of concerns." The `server.js` file handles
+// routing and server setup, while the controller files contain the business logic for each API endpoint.
 const {
   getContacts,
   createContact,
   updateContact,
-  deleteContact
+  deleteContact,
 } = require("./controllers/contactController");
+const { registerUser, loginUser } = require("./controllers/userController");
 
-// Line 15: Defines an asynchronous function to connect to the MongoDB database.
+// --- DATABASE CONNECTION ---
+
+// Defines an `async` function to connect to the MongoDB database using Mongoose.
 const connectDB = async () => {
   try {
-    // Line 18: This is the core connection logic. It uses mongoose.connect() to establish
-    // a connection to the MongoDB database. The connection string (URI) is securely
-    // pulled from your environment variables, which were loaded by dotenv.
-    // The `await` keyword pauses the function until the connection is successful or fails.
-    const conn = await mongoose.connect(process.env.MONGO_URI);
-    
-    // Line 19: If the connection is successful, this line logs a confirmation message
-    // to the console, including the host of the connected database.
+    // This is the core connection logic. `mongoose.connect()` establishes a connection
+    // to the MongoDB database.
+    // - `process.env.MONGO_URI`: The connection string (URI) is securely pulled from
+    //   your environment variables.
+    // - `await`: Pauses the function until the connection is successful or fails.
+    const conn = await mongoose.connect(process.env.MONGO_URI, {});
+
+    // If the connection is successful, this line logs a confirmation message to the
+    // console, including the host of the connected database for verification.
     console.log(`MongoDB Connected: ${conn.connection.host}`);
   } catch (error) {
-    // Line 21: If mongoose.connect() fails, it throws an error which is caught here.
-    console.error(`Error: ${error.message}`);
-    
-    // Line 23: This is a critical step. If the database connection fails, the application
-    // cannot function. process.exit(1) immediately stops the Node.js process with a
-    // "failure" code (1).
+    // If `mongoose.connect()` fails, it throws an error which is caught here.
+    console.error(`Database Connection Error: ${error.message}`);
+
+    // This is a critical step. If the database connection fails, the application
+    // cannot function. `process.exit(1)` immediately stops the Node.js process
+    // with a "failure" code (1).
     process.exit(1);
   }
 };
-
-// Line 28: Calls the function to connect to the database as soon as the server starts.
+// Calls the function to initiate the database connection as soon as the server starts.
 connectDB();
 
-// Line 30: Creates an instance of the Express application.
+// --- EXPRESS APP SETUP ---
+
+// Creates an instance of the Express application. `app` is the main object that
+// represents our web server.
 const app = express();
-// Line 31: Defines the port number the server will listen on.
+// Defines the port number the server will listen on. It's good practice to use an
+// environment variable for this (e.g., `process.env.PORT`), but a hardcoded value is fine for development.
 const PORT = 5000;
 
-// Line 33: This is a crucial piece of middleware. It tells Express to automatically
-// parse the body of incoming POST, PUT, and PATCH requests that have a
-// 'Content-Type' of 'application/json'. The parsed JSON data is then made available
-// on `req.body`.
+// --- MIDDLEWARE ---
+// Middleware are functions that execute during the lifecycle of a request to the server,
+// before the final route handler is reached. They have access to the request (`req`),
+// response (`res`), and the `next` middleware function in the application’s request-response cycle.
+
+// `app.use()` mounts middleware functions at a specified path (or globally if no path is specified).
+
+// `express.json()`: A built-in Express middleware. It parses incoming
+// requests with JSON payloads (i.e., with a 'Content-Type' header of 'application/json').
+// The parsed JSON data is then made available on the `req.body` property for route handlers to use.
 app.use(express.json());
 
-// Line 34: This middleware enables CORS for all routes. It adds the necessary
-// HTTP headers to responses (like `Access-Control-Allow-Origin: *`) so that
-// browsers don't block requests from your React app (on localhost:5173) to this
-// server (on localhost:5000).
+// `cors()`: This middleware enables Cross-Origin Resource Sharing for all routes.
+// It adds the necessary HTTP headers to responses (like `Access-Control-Allow-Origin: *`)
+// so that browsers don't block requests from the frontend to this backend server.
 app.use(cors());
 
-// Line 37-39: Defines a simple "health check" route. When you navigate to
-// http://localhost:5000/ in your browser, you'll see this message, confirming
-// the API server is running.
+// --- ROUTES ---
+// This section defines the API endpoints (routes) and maps them to their corresponding controller functions.
+
+// Defines a simple "health check" route at the root URL (`/`). When you navigate to
+// `http://localhost:5000/` in your browser, this handler sends a welcome message, confirming
+// that the API server is running.
 app.get("/", (req, res) => {
   res.send("Welcome to the MERN Contact List API!");
 });
 
-// --- API Routes for CRUD Operations ---
-// These lines map specific HTTP methods and URL paths to the controller functions.
+// --- User Routes ---
+// `app.post(path, handler)`: Maps an HTTP POST request at the specified `path` to a `handler` function.
+// This route handles new user registration by calling the `registerUser` controller.
+app.post("/api/users", registerUser);
+// This route handles user login by calling the `loginUser` controller.
+app.post("/api/users/login", loginUser);
 
-// Line 43: GET /api/contacts -> getContacts
-// When a GET request is made to this URL, the getContacts function will execute.
-app.get("/api/contacts", getContacts);
+// --- Contact Routes (Protected) ---
+// These routes are for CRUD (Create, Read, Update, Delete) operations on contacts.
+// They all use the `protect` middleware, which means a user must be logged in
+// (and provide a valid token) to access them.
 
-// Line 44: POST /api/contacts -> createContact
-// When a POST request is made to this URL, the createContact function will execute.
-app.post("/api/contacts", createContact);
+// GET /api/contacts: Fetches all contacts belonging to the logged-in user.
+// The `protect` middleware runs first. If authentication is successful, it calls `next()`,
+// and execution proceeds to the `getContacts` handler. If not, it sends an error response.
+app.get("/api/contacts", protect, getContacts);
 
-// Line 45: PUT /api/contacts/:id -> updateContact
-// When a PUT request is made to a URL like /api/contacts/123, the updateContact
-// function will execute. The `:id` is a URL parameter.
-app.put("/api/contacts/:id", updateContact);
+// POST /api/contacts: Creates a new contact associated with the logged-in user.
+app.post("/api/contacts", protect, createContact);
 
-// Line 46: DELETE /api/contacts/:id -> deleteContact
-// When a DELETE request is made to a URL like /api/contacts/123, the deleteContact
-// function will execute.
-app.delete("/api/contacts/:id", deleteContact);
+// PUT /api/contacts/:id: Updates an existing contact.
+// The `:id` is a URL parameter that specifies which contact to update. It's available via `req.params.id`.
+app.put("/api/contacts/:id", protect, updateContact);
 
-// Line 49-51: This starts the server. The app.listen() method binds the server
-// to the specified PORT and waits for incoming connections. The callback function
-// logs a message to the console once the server is successfully running.
+// DELETE /api/contacts/:id: Deletes an existing contact.
+app.delete("/api/contacts/:id", protect, deleteContact);
+
+// --- START SERVER ---
+
+// This starts the server. The `app.listen()` method binds the Express application to the
+// specified `PORT` and begins listening for incoming connections. The callback function
+// is executed once the server is successfully running, logging a confirmation message.
 app.listen(PORT, () => {
   console.log(`Server is running on port ${PORT}`);
 });
