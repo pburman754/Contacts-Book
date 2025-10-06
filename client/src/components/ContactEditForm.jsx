@@ -1,20 +1,24 @@
 import React, { useState } from "react";
+import { useAuth } from "../context/AuthContext";
 
 const ContactEditForm = ({ currentContact, onUpdate, onCancel }) => {
   const [name, setName] = useState(currentContact.name);
   const [email, setEmail] = useState(currentContact.email);
   const [phone, setPhone] = useState(currentContact.phone);
   const API_URL = "http://localhost:5000/api/contacts";
-
+   const { user } = useAuth();
+   const getAuthHeader = () => ({
+    "Content-Type": "application/json",
+    Authorization: `Bearer ${user?.token || ""}`,
+  });
+ 
   const handleSubmit = async (e) => {
     e.preventDefault();
     const updateData = { name, email, phone };
     try {
       const response = await fetch(`${API_URL}/${currentContact._id}`, {
         method: "PUT",
-        headers: {
-          "Content-Type": "application/json",
-        },
+         headers: getAuthHeader(),
         body: JSON.stringify(updateData),
       });
       if (!response.ok) {
@@ -22,6 +26,7 @@ const ContactEditForm = ({ currentContact, onUpdate, onCancel }) => {
         throw new Error(errorData.message || "Failed to update contact");
       }
       const updatedContact = await response.json();
+
       onUpdate(updatedContact);
     } catch (error) {
       alert(`Error updating contact : ${error.message}`);
@@ -62,4 +67,5 @@ const ContactEditForm = ({ currentContact, onUpdate, onCancel }) => {
     </form>
   );
 };
+
 export default ContactEditForm;

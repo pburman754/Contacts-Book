@@ -14,6 +14,9 @@ import "./App.css";
 
 // Line 12: Imports the `ContactForm` component from its file. This is a core concept of React called "composition", where we build complex UIs by nesting smaller, reusable components inside larger ones. `App` is the parent, and `ContactForm` will be its child.
 import ContactForm from "./components/ContactForm";
+import Login from "./components/Login";
+import Register from "./components/Register";
+import { useAuth } from "./context/AuthContext";
 import ContactEditForm from "./components/ContactEditForm";
 import { Fragment } from "react";
 
@@ -26,12 +29,13 @@ const API_URL = "http://localhost:5000/api/contacts";
 function App() {
   // --- STATE MANAGEMENT ---
   // This section uses the `useState` Hook to declare variables that will hold the component's state.
-
+  const { user, logout } = useAuth();
   // Line 25: Initializes a state variable named `contacts`.
   // - `contacts`: This variable will hold the array of contact objects fetched from the API. It's initialized to an empty array `[]`.
   // - `setContacts`: This is the *only* function you should use to update the `contacts` state. Calling `setContacts(newContacts)` tells React to replace the old state with the new one and schedule a re-render of the component to reflect the change.
   // - `useState([])`: This is the Hook call itself, setting the initial value of `contacts` to an empty array.
   const [contacts, setContacts] = useState([]);
+  const [showRegister, setShowRegister] = useState(false);
   const [editingContact, setEditingContact] = useState(null);
 
   // Line 31: Initializes a state variable named `loading`. This is a common and very useful pattern for managing UI during asynchronous operations.
@@ -40,18 +44,34 @@ function App() {
   // - `useState(true)`: We initialize it to `true` because as soon as the component renders for the first time, we will immediately start fetching data.
   const [loading, setLoading] = useState(true);
 
+  const getAuthHeader = () => {
+    if (!user || !user.token) {
+      return {};
+    }
+    return {
+      Authorization: `Bearer ${user.token}`,
+    };
+  };
+
   // --- DATA FETCHING (SIDE EFFECT) ---
 
   // Line 37: The `useEffect` Hook is used to perform the initial data fetch from the API.
   // The first argument is a function (the "effect") that will be executed by React.
   // The second argument is a "dependency array" (`[]`), which is crucial. An empty array tells React to run this effect **only once**, right after the component is first rendered to the DOM. This mimics the `componentDidMount` lifecycle method in older class-based components.
   useEffect(() => {
+    if (!user) {
+      // Don't fetch if not logged in
+      setContacts([]);
+      setLoading(false);
+      return;
+    }
+
     // Line 40: We define an `async` function inside the effect. The effect function itself cannot be async if it needs to return a cleanup function. The standard pattern is to define an async function inside and then call it.
     const fetchContacts = async () => {
       // Line 42: A `try...catch...finally` block is used for robust error handling during the asynchronous operation.
       try {
         // Line 44: The `fetch` API is used to make a GET request to our backend. The `await` keyword pauses the `fetchContacts` function's execution until the network request completes and the Promise resolves with a `Response` object.
-        const response = await fetch(API_URL);
+        const response = await fetch(API_URL, { headers: getAuthHeader() });
 
         // Line 47: It's critical to check if the HTTP response was successful. `response.ok` is a boolean that is `true` for status codes in the 200-299 range. If the server returns an error (like 404 Not Found or 500 Internal Server Error), `fetch` does NOT throw an error itself, so we must check and throw one manually.
         if (!response.ok) {
@@ -74,9 +94,10 @@ function App() {
       }
     };
 
+
     // Line 67: We call the async function we just defined to kick off the data fetching process.
     fetchContacts();
-  }, []); // The empty dependency array `[]` ensures this entire `useEffect` block runs only once.
+  }, [user]); // The empty dependency array `[]` ensures this entire `useEffect` block runs only once.
 
   // --- EVENT HANDLERS ---
 
@@ -94,15 +115,21 @@ function App() {
     try {
       const response = await fetch(`${API_URL}/${id}`, {
         method: "DELETE",
+        headers: getAuthHeader(),
       });
+
       if (!response.ok) {
-        throw new Error("Failed to delete Contact");
+        const errorData = await response.json();
+        throw new Error(errorData.message || "Failed to delete contact");
       }
+
       setContacts((prevContacts) =>
         prevContacts.filter((contact) => contact._id !== id)
       );
     } catch (error) {
-      alert(`Error deleting contact: ${error.message}`);
+      // More user-friendly error handling
+      console.error("Error deleting contact:", error);
+      alert(`Error: ${error.message}`);
     }
   };
 
@@ -118,6 +145,18 @@ function App() {
 
   // --- CONDITIONAL RENDERING ---
 
+  if (!user) {
+    return (
+      <div className="container">
+        <h1>MERN Contact List (Secured)</h1>
+        {showRegister ? (
+          <Register onSwitchToLogin={() => setShowRegister(false)} />
+        ) : (
+          <Login onSwitchToRegister={() => setShowRegister(true)} />
+        )}
+      </div>
+    );
+  }
   // Line 81: This is a conditional rendering block. It checks the `loading` state variable. While `loading` is `true`, the component will return this simple JSX, showing a "Loading..." message to the user. The code below this block will not be executed yet.
   if (loading) {
     return <h1>Loading Contacts...</h1>;
@@ -127,8 +166,8 @@ function App() {
   // This is the JSX that gets rendered to the screen once `loading` is `false`.
 
   return (
-    <div className="container">{
-      editingContact ? (
+    <div className="container">
+      {editingContact ? (
         // If we are in "edit mode", show only the edit form
         <ContactEditForm
           currentContact={editingContact}
@@ -139,10 +178,19 @@ function App() {
         // Otherwise, show the main view with the create form and contact list
         <Fragment>
           <h1>MERN Contact List</h1>
-          <ContactForm onContactCreated={handleContactCreated} />
+          <div
+            style={{
+              display: "flex",
+              justifyContent: "space-between",
+              alignItems: "center",
+            }}
+          >
+            <button onClick={logout}>Logout ({user.name})</button>{" "}
+            {/* Logout button */}
+          </div>          <ContactForm onContactCreated={handleContactCreated} />
           <p>Total Contacts: {contacts.length}</p>
           <div className="contact-list">
-            {contacts.map((contact) => (
+            {Array.isArray(contacts) && contacts.map((contact) => (
               <div key={contact._id} className="contact-card">
                 <h3>{contact.name}</h3>
                 <p>Email: {contact.email}</p>
@@ -177,7 +225,7 @@ function App() {
           </div>
         </Fragment>
       )}
-    </div>    
+    </div>
   );
 }
 

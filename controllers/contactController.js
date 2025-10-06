@@ -122,10 +122,10 @@ const deleteContact = asyncHandler(async (req, res) => {
   }
 
   // If the contact exists and the user is authorized, it's deleted from the database.
-  await Contact.deleteOne({ _id: req.params.id });
+  await Contact.findByIdAndDelete(req.params.id);
 
   // Send a 200 (OK) status with a success message.
-  res.status(200).json({ message: "Contact removed Successfully" });
+  res.status(200).json({ id: req.params.id, message: "Contact removed Successfully" });
 });
 
 // --- EXPORTS ---
