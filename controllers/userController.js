@@ -6,6 +6,7 @@
 // It catches any errors thrown in async functions and passes them to the Express error
 // handling middleware, so you don't need to write `try...catch` blocks in every controller.
 const asyncHandler = require("express-async-handler");
+const { validationResult } = require("express-validator");
 // `jsonwebtoken` (JWT): A library to create and verify JSON Web Tokens. JWTs are used
 // for securely transmitting information between parties as a JSON object, commonly for
 // authentication and authorization.
@@ -39,6 +40,11 @@ const generateToken = (id) => {
 // @route   POST /api/users/login
 // @access  Public
 const loginUser = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
+
   // Destructure email and password from the request body.
   const { email, password } = req.body;
 
@@ -71,6 +77,10 @@ const loginUser = asyncHandler(async (req, res) => {
 // @route   POST /api/users
 // @access  Public
 const registerUser = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   // Destructure name, email, and password from the request body.
   const { name, email, password } = req.body;
 

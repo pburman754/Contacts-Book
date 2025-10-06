@@ -5,6 +5,7 @@
 // Imports the Mongoose model for the 'Contact' collection. This model
 // provides the methods needed to interact with the contacts in the database (e.g., `find`, `create`).
 const Contact = require("../models/Contact");
+const { validationResult } = require("express-validator");
 // `express-async-handler`: A utility middleware for Express that wraps async route handlers.
 // It catches any errors thrown in async functions and passes them to the Express error
 // handling middleware, so you don't need to write `try...catch` blocks in every controller.
@@ -31,17 +32,13 @@ const getContacts = asyncHandler(async (req, res) => {
 // @route   POST /api/contacts
 // @access  Private
 const createContact = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   // Destructures the `name`, `email`, and `phone` fields from the
   // request body (`req.body`). This data is sent from the frontend form.
   const { name, email, phone } = req.body;
-
-  // Basic validation to ensure required fields are present.
-  if (!name || !email) {
-    // If validation fails, set the HTTP status to 400 (Bad Request)
-    // and throw an error. `asyncHandler` will catch this and send an error response.
-    res.status(400);
-    throw new Error("Please include a name and email");
-  }
 
   // Uses the Mongoose model's `.create()` method to create and save a
   // new contact document in the database with the data from the request.
@@ -63,6 +60,10 @@ const createContact = asyncHandler(async (req, res) => {
 // @route   PUT /api/contacts/:id
 // @access  Private
 const updateContact = asyncHandler(async (req, res) => {
+  const errors = validationResult(req);
+  if (!errors.isEmpty()) {
+    return res.status(400).json({ errors: errors.array() });
+  }
   // First, it tries to find the contact by its unique ID, which is
   // extracted from the URL parameters (`req.params.id`).
   const contact = await Contact.findById(req.params.id);
